@@ -14,13 +14,14 @@
 #include<stdlib.h>
 
 void my_err(const char * err_string ,int line){
-    printf("第 %d 行:",line);
+    fprintf(stderr,"第 %d 行:",line);
     perror(err_string);
+    printf("\n");
     exit(0);
 }
 /*设置锁函数*/
 int lock_set(int fd,struct flock * lock){
-    if(fcntl(fd,F_SETLK,lock)){
+    if(fcntl(fd,F_SETLK,lock) == 0){
         //上锁成功
         if(lock->l_type == F_RDLCK)
             printf("设置读锁成功,pid:%d\n",getpid());
@@ -29,6 +30,7 @@ int lock_set(int fd,struct flock * lock){
         else if(lock->l_type == F_UNLCK)
             printf("释放锁成功,pid:%d\n",getpid());
     }else{
+        //my_err("fcntl",__LINE__);
         perror("设置锁失败!\n");
         return -1;
     }
@@ -99,7 +101,7 @@ int main(){
 
 
     //释放锁
-    lock.l_type = F_WRLCK;
+    lock.l_type = F_UNLCK;
     lock_set(fd,&lock);
     close(fd);
     return 0;
