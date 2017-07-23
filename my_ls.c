@@ -410,7 +410,7 @@ int main(int argc, char ** argv) {
 			flag_param |= PARAM_R;
 			break;
 		default:
-			fprintf(stderr, "不支持参数 %c\n", ch);
+			fprintf(stderr, "ls: 无效选项 -%c\n", (char)optopt);
 			exit(1);
 		}
 	}
@@ -422,7 +422,8 @@ int main(int argc, char ** argv) {
 			strcpy(path, argv[i]);
 			//如果目标文件名或目录不存在,退出
 			if (stat(path, &buf) == -1) {
-				my_err("stat", __LINE__);
+				printf("my_ls :无法访问'%s':没有那个文件或目录\n",path);
+				exit(0);
 			}
 			if (S_ISDIR(buf.st_mode)) {
 				//argv[i]是目录
