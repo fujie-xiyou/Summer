@@ -11,5 +11,6 @@ int main(){
     char str[50] = "./test/";
     printf("--%s\n",basename(str));
     printf("__%s\n",str);
-    printf("==%s\n",dirname(str));
+    //printf("==%s\n",dirname(str));
+    if( 1 || 2 || 3 ) printf("恩\n");
 }
