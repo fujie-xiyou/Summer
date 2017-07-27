@@ -18,8 +18,13 @@ struct utsname uts;//系统信息
 
 void print_user();//打印用户名@主机名:<工作目录> 命令提示符
 char *sgets(char *str,int len);//安全gets
-char ** anal_cmd();//把由 |  > <组成的复合命令解析成单一命令
-void run(char *path,char **argv,int inp,int pri);//运行指定程序
+char *format_pipe_cmd(char **command , int *count);
+//将command中的 | 提取并替换为\0(即格式化管线)
+
+char ** anal_cmd(char **command ,int *len , int count);
+//把由 |  > <组成的复合命令解析成单一命令
+
+void run_cmd(char **argv,int inp,int pri);//运行命令
 
 
 void print_user(){
@@ -51,46 +56,64 @@ char *sgets(char *str,int len){
 	return rtn;
 }
 
-char ** anal_cmd(char **command ,int *len , int count , char *sym_p){
+char *format_pipe_cmd(char **command , int *count){//处理输入命令中的管线
+	int i = 0;
+	char *pipe = (char *)malloc(sizeof(char) * 20);//存储用户输入命令中的 |
+	char *pipe_p = pipe;
+	while((*command)[i]){
+		if((*command)[i] == '|'){
+			*(pipe_p++) = (*command)[i];
+			(*command)[i] = '\0';
+			(*count)++;
+		}
+		i++;
+	}
+	return pipe;
+}
 
-	int i = 0,j= 0;
+char ** anal_cmd(char **command ,int *len , int count ){
+	if(*len <= 0) return NULL;
+	int i = 0;
 	char *command_p = *command;
 	char **my_argv = (char **)malloc(sizeof(char *) * (*len) / count / 2);
+	memset(my_argv , 0 , sizeof(char *) * (*len) / count / 2);
 	//为最大限度节省内存,这里认为每个被'|'或者'>'隔开
 	//的命令的参数个数不超过strlen(command)/count/2
 
 	int single_len = 0;
 
 	//将分割后的整条输入命令依次解析
-	while(*command_p != '\0'){
+	while(1){
 
 		if(*command_p != ' ' && *command_p != '\0'){
 			single_len++;
 		}else{
-			//将当前空格之前的命令写入 my_argv[i]
+			//将当前空格或\0之前的命令写入 my_argv[i]
+
+
 			if(*command == command_p) {
-				if(*command_p == '\0') break;
-				command_p++;
+				//如果一上来就是空格或\0 则跳过
+				*command = ++command_p;
+				(*len)--;
 				continue;
 			}
-			my_argv[j] = (char *)malloc(sizeof(char) * single_len + 1);
-			memcpy(my_argv[j],*command,single_len);
-			my_argv[j++][single_len] = '\0';
+			my_argv[i] = (char *)malloc(sizeof(char) * single_len + 1);
+			memcpy(my_argv[i],*command,single_len);
+			my_argv[i++][single_len] = '\0';
 			*command = command_p + 1;
-			*len -= single_len;
+			*len -= (single_len + 1);
 			single_len = 0;
 		}
 		if(*(command_p++) == '\0') break;
 
+
 	}
-
-
-
+	my_argv[i] = NULL;
 	return my_argv;
 
 }
 
-void run(char **argv,int inp,int pri){
+void run_cmd(char **argv,int inp,int pri){
 	int pid;
 	int stat_val;
 	pid = fork();
@@ -110,41 +133,36 @@ void run(char **argv,int inp,int pri){
 
 int main(){
 	char *command = malloc(sizeof(char) * 1024);//存储用户输入的命令
-	int i,j,count;
+	int i,count;
 	do{
 		print_user();
 		sgets(command,1024);
-		char sym[50];
-		char *sym_p = sym;//存储用户输入命令中的 | > 等符号
+		char *pipe_p = NULL;//存储用户输入命令中的 | > 等符号
+		char ** my_argv = NULL;
 		int len = strlen(command);
+		if(len == 0) continue;
 		int flag_and;//标记结尾是否有&
 		i = 0;
-		count = 0;
+		count = 1;
 		flag_and = 0;
+
+		//处理后台运行符 待添加
+		if(flag_and == 0) {}
 		if(command[len - 1] == '&'){
 			flag_and = 1;
 			command[len -1] = '\0';
 			len--;
 		}
-
-		//将command中的 | > <提取并替换为\0
-		//注意 只有完成这项操作  才能在后面调用anal_cmd()函数
-		while(command[i]){
-			if(command[i] == '|' || command[i] == '>' || command[i] == '<'){
-				*(sym_p++) = command[i];
-				command[i] = '\0';
-				if(command[i+1] == '>'){
-					*(sym_p++) = command[i+1];
-					command[i] = ' ';
-					command[i+1] = '\0';
-				}
-			}
-			*(sym_p++) = '\0';
-			count++;
-			i++;
+		pipe_p = format_pipe_cmd(&command,&count);
+		printf("%d\n",count);
+		for(i = 1; i < count; i++){
+			printf("%s\n",pipe_p);
+			pipe_p +=strlen(pipe_p) + 1;
 		}
-		sym_p = sym;
-		//anal_cmd();
+		my_argv = anal_cmd(&command , &len ,count);
+
+		//run_cmd()
+
 
 	}while(1);
 
