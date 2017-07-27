@@ -17,12 +17,30 @@ struct utsname uts;//系统信息
 
 
 void print_user();//打印用户名@主机名:<工作目录> 命令提示符
+
 char *sgets(char *str,int len);//安全gets
+
 char *format_pipe_cmd(char **command , int *count);
 //将command中的 | 提取并替换为\0(即格式化管线)
 
-char ** anal_cmd(char **command ,int *len , int count);
-//把由 |  > <组成的复合命令解析成单一命令
+
+
+/*
+ * 每次调用本函数将解析出来一条由format_pipe_cmd()
+ * 函数处理后的command中的一条命令并返回它的首地址
+ * 再次调用将读取下一条命令并返回
+ * 当command中的命令解析完将返回NULL
+ */
+char *div_cmd(char **command );
+
+
+
+/*
+ * 用于将div_cmd分割出来的单条命令进行解析
+ * 将I/O重定向目标存储到
+ */
+char ** anal_cmd(char **single_cmd ,int *len , int count);
+
 
 void run_cmd(char **argv,int inp,int pri);//运行命令
 
@@ -58,7 +76,7 @@ char *sgets(char *str,int len){
 
 char *format_pipe_cmd(char **command , int *count){//处理输入命令中的管线
 	int i = 0;
-	char *pipe = (char *)malloc(sizeof(char) * 20);//存储用户输入命令中的 |
+	char *pipe = (char *)malloc(sizeof(char) * 20);//存储用户输入命令中的管线
 	char *pipe_p = pipe;
 	while((*command)[i]){
 		if((*command)[i] == '|'){
@@ -70,41 +88,64 @@ char *format_pipe_cmd(char **command , int *count){//处理输入命令中的管
 	}
 	return pipe;
 }
-
-char ** anal_cmd(char **command ,int *len , int count ){
-	if(*len <= 0) return NULL;
+char *div_cmd(char **command){
+	char * single_cmd = NULL;
 	int i = 0;
 	char *command_p = *command;
+	int single_len = 0;
+
+	//将分割后的整条输入命令依次解析
+	while (1) {
+		single_len++;
+		if (*command_p == '\0') {
+			if(command_p == *command){
+				//如果一上来就是\0  说明结束了  兄弟
+				return NULL;
+			}
+			single_cmd = (char *) malloc(sizeof(char) * single_len);
+			memcpy(single_cmd, *command, single_len);
+			*command = command_p + 1;
+			break;
+		}
+		command_p++;
+	}
+	return single_cmd;
+}
+char ** anal_cmd(char **single_cmd ,int *len , int count ){
+
+	if(*len <= 0) return NULL;
+	int i = 0;
+	char *single_cmd_p = *single_cmd;
 	char **my_argv = (char **)malloc(sizeof(char *) * (*len) / count / 2);
 	memset(my_argv , 0 , sizeof(char *) * (*len) / count / 2);
-	//为最大限度节省内存,这里认为每个被'|'或者'>'隔开
-	//的命令的参数个数不超过strlen(command)/count/2
+	//为最大限度节省内存,这里认为每个被'|'隔开
+	//的命令的参数个数不超过strlen(single_cmd)/count/2
 
 	int single_len = 0;
 
 	//将分割后的整条输入命令依次解析
 	while(1){
 
-		if(*command_p != ' ' && *command_p != '\0'){
+		if(*single_cmd_p != ' ' && *single_cmd_p != '\0'){
 			single_len++;
 		}else{
 			//将当前空格或\0之前的命令写入 my_argv[i]
 
 
-			if(*command == command_p) {
+			if(*single_cmd == single_cmd_p) {
 				//如果一上来就是空格或\0 则跳过
-				*command = ++command_p;
+				*single_cmd = ++single_cmd_p;
 				(*len)--;
 				continue;
 			}
 			my_argv[i] = (char *)malloc(sizeof(char) * single_len + 1);
-			memcpy(my_argv[i],*command,single_len);
+			memcpy(my_argv[i],*single_cmd,single_len);
 			my_argv[i++][single_len] = '\0';
-			*command = command_p + 1;
+			*single_cmd = single_cmd_p + 1;
 			*len -= (single_len + 1);
 			single_len = 0;
 		}
-		if(*(command_p++) == '\0') break;
+		if(*(single_cmd_p++) == '\0') break;
 
 
 	}
@@ -137,8 +178,9 @@ int main(){
 	do{
 		print_user();
 		sgets(command,1024);
-		char *pipe_p = NULL;//存储用户输入命令中的 | > 等符号
+		char *pipe_p = NULL;//存储用户输入命令中的 |
 		char ** my_argv = NULL;
+		char *single_cmd = NULL;
 		int len = strlen(command);
 		if(len == 0) continue;
 		int flag_and;//标记结尾是否有&
@@ -154,12 +196,8 @@ int main(){
 			len--;
 		}
 		pipe_p = format_pipe_cmd(&command,&count);
-		printf("%d\n",count);
-		for(i = 1; i < count; i++){
-			printf("%s\n",pipe_p);
-			pipe_p +=strlen(pipe_p) + 1;
-		}
-		my_argv = anal_cmd(&command , &len ,count);
+
+		//my_argv = anal_cmd(&command , &len ,count);
 
 		//run_cmd()
 
