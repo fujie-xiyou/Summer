@@ -16,13 +16,19 @@ void my_err(const char * err_string,int line){
 }
 int main(int argc,char ** argv){
     char buf[512 + 1];
-    if(argc < 2){
+  /*  if(argc < 2){
         printf("my_cd <目录>\n");
         exit(1);
     }
+    
     if(chdir(argv[1]) < 0){
         my_err("chdir",__LINE__);
     }
+    */
+
+    
+
+    //测试子进程的起始工作目录
     if(getcwd(buf,512) < 0){
         my_err("getcwd",__LINE__);
     }
