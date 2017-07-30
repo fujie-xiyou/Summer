@@ -1,6 +1,7 @@
 cc=gcc
 all:
-	gcc -o myshell -g myshell.c
+	gcc -c myshell.c -g
+	gcc -o myshell *.o -lreadline -g 
 clear:
 	rm -f myshell
-
+	

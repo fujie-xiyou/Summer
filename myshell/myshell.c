@@ -11,6 +11,8 @@
 #include<string.h>
 #include<pwd.h>
 #include<errno.h>
+#include<readline/history.h>
+#include<readline/readline.h>
 
 
 /*
@@ -34,7 +36,7 @@ typedef struct {
 
 struct passwd* psd;//用户信息
 struct utsname uts;//系统信息
-int pfds[2];//管道数组
+int flag_and;//标记结尾是否有&
 
 
 
@@ -45,9 +47,7 @@ int pfds[2];//管道数组
  */
 char *get_string(char *cmd_temp , int* i);
 
-void print_user();//打印用户名@主机名:<工作目录> 命令提示符
-
-char *sgets(char *str,int len);//安全gets
+void print_user(char **command);//打印用户名@主机名:<工作目录> 命令提示符
 
 char *format_pipe(char *command );
 //将command中的 | 提取并替换为\0(即格式化管线)
@@ -74,7 +74,12 @@ cmd_t * anal_single_cmd(char *single_cmd );
 _Bool build_in_cmd(cmd_t *cmd);
 
 
-void run_cmd(char **command ,_Bool is_pipe , char *pipe_p);//运行命令
+//运行被 |　分割的单条命令　递归处理多组输入输出重定向
+void run_single_cmd(cmd_t *cmd ,  _Bool is_pipe, char *pipe_p,int i,int j);
+
+//通过调用run_single_cmd()运行命令整条命令
+void run_cmd(char **command ,_Bool is_pipe , char *pipe_p);
+
 
 
 
@@ -89,34 +94,32 @@ char *get_string(char *cmd_temp , int* i){
 }
 
 
-void print_user(){
-	char *work_path = (char *)malloc(sizeof(char) * 512);
+void print_user(char **command){
+	char buf[1024];
+	char work_path[512];
 	char *temp =NULL;
 	psd = getpwuid(getuid());
 	if(uname(&uts) < 0){
-		printf("myshell: 无法获取系统信息,errno = %d\n",errno);
+		fprintf(stderr,"myshell: 无法获取系统信息,errno = %d\n",errno);
 		exit(0);
 	}
 	if(getcwd(work_path,512) == NULL){
-		printf("myshell: 无法获取工作目录,errno = %d\n",errno);
+		fprintf(stderr,"myshell: 无法获取工作目录,errno = %d\n",errno);
 		exit(0);
 	}
 	if((temp = strstr(work_path,psd->pw_dir)) && temp == work_path){
-		work_path = work_path + (strlen(psd->pw_dir) - 1);
-		*work_path = '~';
+		work_path[strlen(psd->pw_dir) - 1] = '~';
 	}
-	printf("\e[36m%s@%s\e[37m:\e[34m%s\e[0m",psd->pw_name,uts.nodename,work_path);
-	if(psd->pw_uid == 0) printf("# ");
-	else printf("$ ");
+	sprintf(buf,"\e[36m%s@%s\e[37m:\e[34m%s\e[0m",
+			psd->pw_name,uts.nodename,&work_path[strlen(psd->pw_dir) - 1]);
+	if(psd->pw_uid == 0) strcat(buf,"# ");
+	else strcat(buf,"$ ");
+	*command = readline(buf);
+	if(*command && **command){
+		add_history(*command);
+	}
 }
 
-char *sgets(char *str,int len){
-	char * rtn = fgets(str,len,stdin);
-	if(str[strlen(str)-1]=='\n'){
-		str[strlen(str)-1]='\0';
-	}
-	return rtn;
-}
 
 char *format_pipe(char *command){//处理输入命令中的管线
 	int i = 0;
@@ -156,7 +159,7 @@ char *div_cmd(char **command){
 	return single_cmd;
 }
 cmd_t * anal_single_cmd(char *single_cmd /*, char *pipe_t*/){
-
+	if(single_cmd == NULL) return NULL;
 	int i = 0 , j = 0 ,l = 0 ,k = 0;
 //	int single_len = strlen(single_cmd);
 	char cmd_temp[strlen(single_cmd) + 1];
@@ -168,6 +171,7 @@ cmd_t * anal_single_cmd(char *single_cmd /*, char *pipe_t*/){
 		i++;
 	}
 	cmd_t *cmd = (cmd_t *) malloc(sizeof(cmd_t));
+	memset(cmd,0,sizeof(cmd_t));
 
 	//开始从头读取命令
 	i = 0;
@@ -218,111 +222,145 @@ _Bool build_in_cmd(cmd_t *cmd){
 	if(strcmp(cmd->argv[0],"cd") == 0){
 		if(cmd->argv[1] == NULL || strcmp(cmd->argv[1],"~") == 0) cmd->argv[1] = psd->pw_dir;
 		if(chdir(cmd->argv[1]) < 0){
-			printf("cd: ");
+			fprintf(stderr,"cd: ");
 			switch(errno){
 				case 2:
-					printf("没有那个文件或目录");
+					fprintf(stderr,"没有那个文件或目录");
 					break;
 				case 13 :
-					printf("权限不足");
+					fprintf(stderr,"权限不足");
 					break;
 				default:
-					printf("执行出错");
+					fprintf(stderr,"执行出错");
 			}
-			printf(": %s\n",cmd->argv[1]);
+			fprintf(stderr,": %s\n",cmd->argv[1]);
 		}
 		return true;
 	}
 	return false;
 }
-
-void run_cmd(char **command, _Bool is_pipe, char *pipe_p) {
+void run_single_cmd(cmd_t *cmd, _Bool is_pipe, char *pipe_p ,int i,int j){
+	if(cmd == NULL) return;
 	int pid;
-	int stat_val;
-	int i = 0, j = 0;
 	int fd, fp, fdt, fpt;
-	char *single_cmd = NULL;
-	cmd_t *cmd = NULL;
-	single_cmd = div_cmd(command);
-	cmd = anal_single_cmd(single_cmd);
-	pipe(pfds);
-	if (build_in_cmd(cmd))
-		return;
-	do {
-		fdt = dup(0);
-		fpt = dup(1); //先将标准输入输出文件流复制到fdt和fpt
-
-		//处理输入重定向  包括管道右端
-		if (is_pipe) {
-			rename("/tmp/pipe_w" , "/tmp/pipe_r");
-			fd = open("/tmp/pipe_r", O_RDONLY);
-			dup2(fd, 0);
-		} else if (cmd->rec.type_inp[i] != 0) {
-			fd = open(cmd->rec.red_inp[i], O_RDONLY);
-			dup2(fd, 0);
-			i++;
-		}
-		//处理输出重定向  包括管道左端
-		if (*pipe_p != '\0') {
-			fp = open("/tmp/pipe_w", O_WRONLY | O_CREAT | O_TRUNC,
+	fdt = dup(0);
+	fpt = dup(1); //先将标准输入输出文件流复制到fdt和fpt
+	int stat_val;
+	//处理输入重定向  包括管道右端
+	if (is_pipe) {
+		rename("/tmp/pipe_w", "/tmp/pipe_r");
+		fd = open("/tmp/pipe_r", O_RDONLY);
+		dup2(fd, 0);
+	} else if (cmd->rec.type_inp[i] != 0) {
+		fd = open(cmd->rec.red_inp[i], O_RDONLY);
+		dup2(fd, 0);
+		i++;
+	}
+	//处理输出重定向  包括管道左端
+	if (*pipe_p != '\0') {
+		fp = open("/tmp/pipe_w", O_WRONLY | O_CREAT | O_TRUNC,
+		S_IRUSR | S_IWUSR);
+		dup2(fp, 1);
+	} else if (cmd->rec.type_pri[j] != 0) {
+		if (cmd->rec.type_pri[j] == 2) {
+			fp = open(cmd->rec.red_pri[j], O_WRONLY | O_CREAT | O_APPEND,
 			S_IRUSR | S_IWUSR);
-			dup2(fp, 1);
-		} else if (cmd->rec.type_pri[j] != 0) {
+		} else {
 			fp = open(cmd->rec.red_pri[j], O_WRONLY | O_CREAT,
 			S_IRUSR | S_IWUSR);
-			dup2(fp, 1);
-			j++;
 		}
-		pid = fork();
-		if (pid == -1) {
-			printf("进程创建失败!\n errno = %d", errno);
-			exit(0);
-		} else if (pid == 0) {
-			if(execvp(cmd->argv[0], cmd->argv) == -1){
-				printf("myshell: ");
-				switch(errno){
-					case 2:
-						printf("找不到命令");
-						break;
-					case 13 :
-						printf("权限不足");
-						break;
-					default:
-						printf("执行出错");
-				}
-				printf(": %s\n",cmd->argv[0]);
+
+		dup2(fp, 1);
+		j++;
+	}
+	if (cmd->rec.type_inp[i] != 0 || cmd->rec.type_pri[j] != 0){
+				run_single_cmd(cmd, false, pipe_p,i,j);
+	}
+
+	pid = fork();
+	if (pid == -1) {
+		fprintf(stderr,"进程创建失败!\n errno = %d", errno);
+		exit(0);
+	} else if (pid == 0) {
+		if(flag_and == 1){
+			setsid();
+		}
+		if (execvp(cmd->argv[0], cmd->argv) == -1) {
+			//remove(cmd->rec.red_pri[j-1]);
+			fprintf(stderr,"myshell: ");
+			switch (errno) {
+			case 2:
+				fprintf(stderr,"找不到命令");
+				break;
+			case 13:
+				fprintf(stderr,"权限不足");
+				break;
+			default:
+				fprintf(stderr,"执行出错 errno = %d",errno);
 			}
-			exit(0);
+
+			fprintf(stderr,": %s\n", cmd->argv[0]);
 		}
+		exit(0);
+	} else {
 		close(fd);
 		close(fp);
 		remove("/tmp/pipe_r");
 		dup2(fdt, 0);
 		dup2(fpt, 1); //恢复标准输入输出
-		wait(&stat_val);
+		if (flag_and == 0)
+			wait(&stat_val);
+		else {
+			printf("进程 id：%d 后台运行\n", pid);
+			flag_and = 0;
 
-	} while (cmd->rec.type_inp[i] != 0 || cmd->rec.type_pri[j] != 0);
+		}
+		usleep(50000);
+	}
+
+}
+void run_cmd(char **command, _Bool is_pipe, char *pipe_p) {
+	int i = 0, j = 0;
+	char *single_cmd = NULL;
+	cmd_t *cmd = NULL;
+	single_cmd = div_cmd(command);
+	cmd = anal_single_cmd(single_cmd);
+	if(cmd == NULL || cmd->argv[0] == NULL) {
+		fprintf(stderr,"myshell: 缺少有效命令\n");
+		return;
+	}
+	if (build_in_cmd(cmd))
+		return;
+	run_single_cmd(cmd,is_pipe,pipe_p, i ,j);
 
 	if (*pipe_p != '\0')
 		run_cmd(command, true, pipe_p + 1);
-
 }
 
 
 
 int main(){
-	char *command = malloc(sizeof(char) * 1024);//存储用户输入的命令
+
+	char *command;
+	/*
+	 * 屏蔽Ctrl+C
+	 */
+    sigset_t intmask;
+    sigemptyset(&intmask);/* 将信号集合设置为空 */
+    sigaddset(&intmask,SIGINT);/* 加入中断 Ctrl+C 信号*/
+    /*阻塞信号*/
+    sigprocmask(SIG_BLOCK,&intmask,NULL);
+
+
 	do{
-		print_user();
-		sgets(command,1024);
+		flag_and = 0;
+		print_user(&command);
 		int len = strlen(command);
 		if(len == 0) continue;
-		int flag_and;//标记结尾是否有&
-		flag_and = 0;
 		char *pipe_p;
 		pipe_p = format_pipe(command);
-		//处理后台运行符 待添加
-		if(flag_and == 0) {}
+
+		//处理后台运行符
 		if(command[len - 1] == '&'){
 			flag_and = 1;
 			command[len -1] = '\0';
