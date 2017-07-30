@@ -342,13 +342,12 @@ void run_cmd(char **command, _Bool is_pipe, char *pipe_p) {
 int main(){
 
 	char *command;
-	/*
-	 * 屏蔽Ctrl+C
-	 */
+	
+	//屏蔽Ctrl+C
     sigset_t intmask;
-    sigemptyset(&intmask);/* 将信号集合设置为空 */
-    sigaddset(&intmask,SIGINT);/* 加入中断 Ctrl+C 信号*/
-    /*阻塞信号*/
+    sigemptyset(&intmask);// 将信号集合设置为空 
+    sigaddset(&intmask,SIGINT);// 加入中断 Ctrl+C 信号
+    //阻塞信号
     sigprocmask(SIG_BLOCK,&intmask,NULL);
 
 
