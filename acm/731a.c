@@ -20,10 +20,12 @@ _Bool check(int x,int y){
 void dfs(int x,int y){
     if(check(x,y)) {
         vis[x][y] = 1;
-        if(++step == p * q) {
+        if(step == p * q) {
             printf("%c%d",x+65,y+1);
             //printf("yes\n");
             return;
+        }else{
+            step++;
         }
         for(int i = 0 ; i < 8 ; i++){
             dfs(x + move[i][0] , y + move[i][1]);
