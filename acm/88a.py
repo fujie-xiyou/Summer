@@ -1,27 +1,29 @@
 #!/usr/bin/env python
 # coding=utf-8
 import pymysql
-db=pymysql.connect("120.78.96.152","root","AAA000aaa", "acm")
+import sys
+db=pymysql.connect("sql.fujie.bid","root","AAA000aaa", "acm")
 cur=db.cursor()
-str = input()
+str = ""
+while True:
+    try :
+        str = str + input() + "\n"
+    except :
+        break
 word = ""
 for i in str:
     if 'a' <= i <= 'z' :
         word = word + i
     elif 'A' <= i <= 'Z':
-        word = word + (i+32)
+        word = word + i.lower()
     else :
         if len(word) > 0 :
-            try :
-                print(cur.execute("INSERT INTO word VALUES('%s')" , word))
-            except :
-                db.rollback()
+            cur.execute("INSERT INTO word VALUES('%s')" % word)
             word = ""
 cur.execute("SELECT DISTINCT word FROM word ORDER BY word")
 rec = cur.fetchall()
-#for i in rec:
- #   print("%s" % i)
-print(rec)
-#cur.execute("DELETE FROM word")
+for i in rec:
+    print("%s" % i)
+cur.execute("DELETE FROM word")
 db.close()
 
