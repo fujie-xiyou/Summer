@@ -6,4 +6,38 @@
  ************************************************************************/
 
 #include<stdio.h>
+#include<stdlib.h>
+#include<string.h>
+#include<sys/types.h>
+#include<sys/socket.h>
+#include<netinet/in.h>
+#include<linux/socket.h>
+#include<arpa/inet.h>
+int main(){
+    struct sockaddr_in clie_addr;
+    int sock_fd;
+    char buf[1024];
+    memset(&clie_addr , 0 ,sizeof(struct sockaddr_in));
+    clie_addr.sin_family = AF_INET;
+    clie_addr.sin_port = htons(80);
+    clie_addr.sin_addr.s_addr = inet_addr("182.254.141.65");
+    sock_fd = socket(AF_INET , SOCK_STREAM , 0);
+    if(sock_fd < 0){
+        perror("socket");
+        exit(0);
+    }
+    inet_aton("182.254.141.65",&clie_addr.sin_addr);
+    if(connect(sock_fd , (struct sockaddr *)&clie_addr,sizeof(struct sockaddr_in)) < 0){
+        perror("connect");
+        exit(0);
+    }
+    while(1){
+        printf("请输入消息:");
+        scanf("%s",buf);
+        if(send(sock_fd,(void *)buf,sizeof(buf),0) < 0 ){
+            perror("send");
+            exit(0);
+        }
 
+    }
+}
