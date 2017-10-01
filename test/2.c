@@ -1,15 +1,12 @@
 /*************************************************************************
-	>    File Name: t.c
+	>    File Name: 2.c
 	>       Author: fujie
 	>         Mail: fujie.me@qq.com
-	> Created Time: 2017年07月25日 星期二 21时17分32秒
+	> Created Time: 2017年08月14日 星期一 15时38分39秒
  ************************************************************************/
 
 #include<stdio.h>
-#include<unistd.h>
-#include<libgen.h>
-int main(){
-    char name[100] = "make/ss/";
-    printf("%s\n",basename(name));
-    printf("%s\n" ,name);
+extern int a;
+void func(){
+    printf("%p\n",&a);
 }

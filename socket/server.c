@@ -20,9 +20,9 @@ int main(){
     struct sockaddr_in serv_addr;//位于netinet/in.h
     struct sockaddr_in client_addr;
     client_len = sizeof(struct sockaddr_in);
-    memset(&client_addr,0,sizeof(client_len));
+    memset(&client_addr,0,client_len);
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(80);//设置端口号80
+    serv_addr.sin_port = htons(5555);//设置端口号80
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     memset(serv_addr.sin_zero,0,sizeof(serv_addr.sin_zero));
     sock_fd = socket(AF_INET,SOCK_STREAM,0);
@@ -46,6 +46,7 @@ int main(){
         exit(0);
     }
     while(1){
+        getchar();
         if(recv(client_fd,(void *)buf , sizeof(buf),0) < 0){
             perror("recv");
             exit(0);
